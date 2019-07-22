@@ -7,16 +7,16 @@
 #####
 from hashlib import sha256
 import json
-
+import time
 from flask import Flask, request
 import requests
 
 # Class for defining a single block in the chain.
 class Block:
     # Constructor.
-    def __init__(self, transactions, timestamp, previous_hash):
-        self.index = []
-        self.transations = transations
+    def __init__(self, index, transactions, timestamp, previous_hash):
+        self.index = index
+        self.transactions = transactions
         self.timestamp = timestamp
         self.previous_hash = previous_hash
     
@@ -38,7 +38,7 @@ class BlockChain:
     
     # Manually generates the first block.
     def create_gen_block(self):
-        gen_block = Block(0,[],"0")
+        gen_block = Block(0,[],time.time(),"0")
         gen_block.hash = gen_block.compute_hash()
         self.chain.append(gen_block)
     
@@ -90,10 +90,10 @@ class BlockChain:
         
         last_block = self.last_block
 
-        new_block = Block(index=last_block.index + 1,
-                          transactions = self.unconfirmed_transactions,
-                          timestamp = time.time(),
-                          previous_hash = last_block.hash)
+        new_block = Block(index=(last_block.index + 1),
+                          transactions=self.unconfirmed_transactions,
+                          timestamp=time.time(),
+                          previous_hash=last_block.hash)
         
         proof = self.proof_of_work(new_block)
         self.add_block(new_block, proof)
@@ -114,7 +114,7 @@ blockchain = BlockChain()
 @app.route('/new_transaction', methods=['POST'])
 def new_transaction():
     # Get inputs
-    tx_data = request.get_json()
+    tx_data = request.get_json(force=True)
     required_fields = ["author", "content"]
 
     # Check to make sure inputs are valid.
@@ -153,13 +153,55 @@ def get_pending_tx():
 
 app.run(debug = True, port = 8000)
 
-#peers = set()
+peers = set()
 
-#@app.route('/add_nodes', methods=['POST'])
-#def register_new_peers():
-#    nodes = request.get_json()
+@app.route('/add_nodes', methods=['POST'])
+def register_new_peers():
+    nodes = request.get_json()
 
-#    if not nodes:
-#        return "Invalid data", 400
-#    for node in nodes:
-#        peers.add(node)
+    if not nodes:
+        return "Invalid data", 400
+    for node in nodes:
+        peers.add(node)
+    
+    return "Success", 201
+
+
+def consensus():
+    longest_chain = None
+    current_len = len(blockchain)
+
+    for node in peers:
+        response = response.get('http://{}/chain'.format(node))
+        length = response.json()['length']
+        chain = response.json()['chain']
+
+        if length > current_len and blockchain.check_chain_validity(chain):
+            current_len = length
+            longest_chain = chain
+
+        if longest_chain:
+            blockchain = longest_chain
+            return True
+        
+        return False
+
+    @app.route('/add_block', methods=['POST'])
+    def validate_and_add_block():
+        block_data = request.get_json()
+
+        block = Block(block_data["index"], block_data["transactions"],
+                  block_data["timestamp", block_data["previous_hash"]])
+ 
+    proof = block_data['hash']
+    added = blockchain.add_block(block, proof)
+ 
+    if not added:
+        return "The block was discarded by the node", 400
+ 
+    return "Block added to the chain", 201
+     
+    def announce_new_block(block):
+    for peer in peers:
+        url = "http://{}/add_block".format(peer)
+        requests.post(url, data=json.dumps(block.__dict__, sort_keys=True))
